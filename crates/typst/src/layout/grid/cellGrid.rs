@@ -770,7 +770,6 @@ impl CellGrid {
         ))
     }
 
-    /// Generates the cell grid, given the tracks and resolved entries.
     pub(super) fn new_internal(
         tracks: Axes<&[Sizing]>,
         gutter: Axes<&[Sizing]>,
@@ -835,3 +834,123 @@ impl CellGrid {
             has_gutter,
         }
     }
+
+    /// Get the grid entry in column `x` and row `y`.
+    ///
+    /// Returns `None` if it's a gutter cell.
+    #[track_caller]
+    pub(super) fn entry(&self, x: usize, y: usize) -> Option<&Entry> {
+        assert!(x < self.cols.len());
+        assert!(y < self.rows.len());
+
+        if self.has_gutter {
+            // Even columns and rows are children, odd ones are gutter.
+            if x % 2 == 0 && y % 2 == 0 {
+                let c = 1 + self.cols.len() / 2;
+                self.entries.get((y / 2) * c + x / 2)
+            } else {
+                None
+            }
+        } else {
+            let c = self.cols.len();
+            self.entries.get(y * c + x)
+        }
+    }
+
+    /// Get the content of the cell in column `x` and row `y`.
+    ///
+    /// Returns `None` if it's a gutter cell or merged position.
+    #[track_caller]
+    pub(super) fn cell(&self, x: usize, y: usize) -> Option<&Cell> {
+        self.entry(x, y).and_then(Entry::as_cell)
+    }
+
+    /// Returns the position of the parent cell of the grid entry at the given
+    /// position. It is guaranteed to have a non-gutter, non-merged cell at
+    /// the returned position, due to how the grid is built.
+    /// - If the entry at the given position is a cell, returns the given
+    /// position.
+    /// - If it is a merged cell, returns the parent cell's position.
+    /// - If it is a gutter cell, returns None.
+    #[track_caller]
+    pub(super) fn parent_cell_position(&self, x: usize, y: usize) -> Option<Axes<usize>> {
+        self.entry(x, y).map(|entry| match entry {
+            Entry::Cell(_) => Axes::new(x, y),
+            Entry::Merged { parent } => {
+                let c = if self.has_gutter {
+                    1 + self.cols.len() / 2
+                } else {
+                    self.cols.len()
+                };
+                let factor = if self.has_gutter { 2 } else { 1 };
+                Axes::new(factor * (*parent % c), factor * (*parent / c))
+            }
+        })
+    }
+
+    /// Returns the position of the actual parent cell of a merged position,
+    /// even if the given position is gutter, in which case we return the
+    /// parent of the nearest adjacent content cell which could possibly span
+    /// the given gutter position. If the given position is not a gutter cell,
+    /// then this function will return the same as `parent_cell_position` would.
+    /// If the given position is a gutter cell, but no cell spans it, returns
+    /// `None`.
+    ///
+    /// This is useful for lines. A line needs to check if a cell next to it
+    /// has a stroke override - even at a gutter position there could be a
+    /// stroke override, since a cell could be merged with two cells at both
+    /// ends of the gutter cell (e.g. to its left and to its right), and thus
+    /// that cell would impose a stroke under the gutter. This function allows
+    /// getting the position of that cell (which spans the given gutter
+    /// position, if it is gutter), if it exists; otherwise returns None (it's
+    /// gutter and no cell spans it).
+    #[track_caller]
+    pub(super) fn effective_parent_cell_position(
+        &self,
+        x: usize,
+        y: usize,
+    ) -> Option<Axes<usize>> {
+        if self.has_gutter {
+            // If (x, y) is a gutter cell, we skip it (skip a gutter column and
+            // row) to the nearest adjacent content cell, in the direction
+            // which merged cells grow toward (increasing x and increasing y),
+            // such that we can verify if that adjacent cell is merged with the
+            // gutter cell by checking if its parent would come before (x, y).
+            // Otherwise, no cell is merged with this gutter cell, and we
+            // return None.
+            self.parent_cell_position(x + x % 2, y + y % 2)
+                .filter(|&parent| parent.x <= x && parent.y <= y)
+        } else {
+            self.parent_cell_position(x, y)
+        }
+    }
+
+    /// Checks if the track with the given index is gutter.
+    /// Does not check if the index is a valid track.
+    #[inline]
+    pub(super) fn is_gutter_track(&self, index: usize) -> bool {
+        self.has_gutter && index % 2 == 1
+    }
+
+    /// Returns the effective colspan of a cell, considering the gutters it
+    /// might span if the grid has gutters.
+    #[inline]
+    pub(super) fn effective_colspan_of_cell(&self, cell: &Cell) -> usize {
+        if self.has_gutter {
+            2 * cell.colspan.get() - 1
+        } else {
+            cell.colspan.get()
+        }
+    }
+
+    /// Returns the effective rowspan of a cell, considering the gutters it
+    /// might span if the grid has gutters.
+    #[inline]
+    pub(super) fn effective_rowspan_of_cell(&self, cell: &Cell) -> usize {
+        if self.has_gutter {
+            2 * cell.rowspan.get() - 1
+        } else {
+            cell.rowspan.get()
+        }
+    }
+}
