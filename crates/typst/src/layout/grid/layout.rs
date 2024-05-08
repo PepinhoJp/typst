@@ -671,49 +671,6 @@ fn skip_auto_index_through_fully_merged_rows(
     }
 }
 
-/// Performs grid layout.
-pub struct GridLayouter<'a> {
-    /// The grid of cells.
-    pub(super) grid: &'a CellGrid,
-    /// The regions to layout children into.
-    pub(super) regions: Regions<'a>,
-    /// The inherited styles.
-    pub(super) styles: StyleChain<'a>,
-    /// Resolved column sizes.
-    pub(super) rcols: Vec<Abs>,
-    /// The sum of `rcols`.
-    pub(super) width: Abs,
-    /// Resolve row sizes, by region.
-    pub(super) rrows: Vec<Vec<RowPiece>>,
-    /// Rows in the current region.
-    pub(super) lrows: Vec<Row>,
-    /// The amount of unbreakable rows remaining to be laid out in the
-    /// current unbreakable row group. While this is positive, no region breaks
-    /// should occur.
-    pub(super) unbreakable_rows_left: usize,
-    /// Rowspans not yet laid out because not all of their spanned rows were
-    /// laid out yet.
-    pub(super) rowspans: Vec<Rowspan>,
-    /// The initial size of the current region before we started subtracting.
-    pub(super) initial: Size,
-    /// Frames for finished regions.
-    pub(super) finished: Vec<Frame>,
-    /// Whether this is an RTL grid.
-    pub(super) is_rtl: bool,
-    /// The simulated header height.
-    /// This field is reset in `layout_header` and properly updated by
-    /// `layout_auto_row` and `layout_relative_row`, and should not be read
-    /// before all header rows are fully laid out. It is usually fine because
-    /// header rows themselves are unbreakable, and unbreakable rows do not
-    /// need to read this field at all.
-    pub(super) header_height: Abs,
-    /// The simulated footer height for this region.
-    /// The simulation occurs before any rows are laid out for a region.
-    pub(super) footer_height: Abs,
-    /// The span of the grid element.
-    pub(super) span: Span,
-}
-
 /// Details about a resulting row piece.
 #[derive(Debug)]
 pub struct RowPiece {
